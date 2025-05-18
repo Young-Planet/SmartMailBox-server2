@@ -11,8 +11,8 @@ from firebase_admin import credentials, messaging
 app = Flask(__name__) # python app.py
 CORS(app)
 
-# Firebase 서비스 계정 인증
-cred = credentials.Certificate("C:/Users/sjysj/Downloads/smart-mailbox-2f172-1ebfe60eface.json")  # 실제 파일명으로 수정해야함
+# 파베 서비스키
+cred = credentials.Certificate("firebase/smart-mailbox-2f172-firebase-adminsdk-fbsvc-5b51258eb9.json")
 firebase_admin.initialize_app(cred)
 
 # FCM에 알림 보내기기
