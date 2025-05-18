@@ -10,7 +10,6 @@ from firebase_admin import credentials, messaging
 
 app = Flask(__name__) # python app.py
 CORS(app)
-init_db()
 
 # Firebase 서비스 계정 인증
 cred = credentials.Certificate("C:/Users/sjysj/Downloads/smart-mailbox-2f172-1ebfe60eface.json")  # 실제 파일명으로 수정해야함
@@ -126,3 +125,7 @@ def upload():
 @app.route('/photo/<filename>')
 def get_photo(filename):
     return send_from_directory(UPLOAD_FOLDER, filename)
+
+# 메인 함수 호출할때 DB
+if __name__ == '__main__':
+    init_db()
