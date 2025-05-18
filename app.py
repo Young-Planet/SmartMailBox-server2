@@ -128,6 +128,7 @@ def upload():
 def get_photo(filename):
     return send_from_directory(UPLOAD_FOLDER, filename)
 
-# 메인 함수 호출할때 DB
 if __name__ == '__main__':
     init_db()
+    port = int(os.environ.get("PORT", 5000))  # Render가 지정한 포트 사용
+    app.run(host='0.0.0.0', port=port)
