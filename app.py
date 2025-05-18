@@ -12,7 +12,8 @@ app = Flask(__name__) # python app.py
 CORS(app)
 
 # 파베 서비스키
-cred = credentials.Certificate("firebase/smart-mailbox-2f172-firebase-adminsdk-fbsvc-16f083554b.json")
+cred_info = json.loads(os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
+cred = credentials.Certificate(cred_info)
 firebase_admin.initialize_app(cred)
 
 # FCM에 알림 보내기기
