@@ -3,10 +3,12 @@ import json
 import firebase_admin
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
-from firebase_admin import credentials, messaging, firestore
+from firebase_admin import credentials, messaging, firestore, initialize_app
 from datetime import datetime
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
+
+load_dotenv()
 
 app = Flask(__name__) # python app.py
 CORS(app)
