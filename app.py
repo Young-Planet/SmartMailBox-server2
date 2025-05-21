@@ -6,12 +6,14 @@ from flask_cors import CORS
 from firebase_admin import credentials, messaging, firestore
 from datetime import datetime
 from werkzeug.utils import secure_filename
+from dotenv import load_dotenv
 
 app = Flask(__name__) # python app.py
 CORS(app)
 
 # 파베 서비스키
-cred = credentials.Certificate("firebase/smart-mailbox-2f172-firebase-adminsdk-fbsvc-16f083554b.json")
+cred_info = json.loads(os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
+cred = credentials.Certificate(cred_info)
 firebase_admin.initialize_app(cred)
 db = firestore.client()
 
