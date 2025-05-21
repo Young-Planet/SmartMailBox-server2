@@ -1,21 +1,19 @@
 import os
-import sqlite3
-import firebase_admin
 import json
-from datetime import datetime
-
+import firebase_admin
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
+from firebase_admin import credentials, messaging, firestore
+from datetime import datetime
 from werkzeug.utils import secure_filename
-from firebase_admin import credentials, messaging
 
 app = Flask(__name__) # python app.py
 CORS(app)
 
 # 파베 서비스키
-cred_info = json.loads(os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
-cred = credentials.Certificate(cred_info)
+cred = credentials.Certificate("firebase/smart-mailbox-2f172-firebase-adminsdk-fbsvc-16f083554b.json")
 firebase_admin.initialize_app(cred)
+db = firestore.client()
 
 # FCM에 알림 보내기기
 def send_fcm_message(token, title, body):
@@ -29,30 +27,6 @@ def send_fcm_message(token, title, body):
 
     response = messaging.send(message)
     print('Successfully sent message:', response)
-
-# DB 초기화 함수
-def init_db():
-    with sqlite3.connect('database.db') as conn:
-        cursor = conn.cursor()
-
-        # 기존 이벤트 테이블
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS events (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp TEXT,
-                status TEXT,
-                photo TEXT
-            )
-        ''')
-
-        # 사용자 테이블
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE NOT NULL,
-                password TEXT NOT NULL
-            )
-        ''')
 
 UPLOAD_FOLDER = 'static/photos'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -72,29 +46,29 @@ def signup():
     if not username or not password:
         return jsonify({'error': '아이디와 비밀번호를 모두 입력하세요.'}), 400
 
-    try:
-        with sqlite3.connect('database.db') as conn:
-            cursor = conn.cursor()
-            cursor.execute('INSERT INTO users (username, password) VALUES (?, ?)', (username, password))
-            conn.commit()
-        return jsonify({'message': '회원가입 성공!'})
-    except sqlite3.IntegrityError:
+    user_ref = db.collection('users').document(username)
+    if user_ref.get().exists:
         return jsonify({'error': '이미 존재하는 사용자입니다.'}), 409
 
-# 로그인 API
+    user_ref.set({
+        'username': username,
+        'password': password,
+        'created_at': firestore.SERVER_TIMESTAMP
+    })
+
+    return jsonify({'message': '회원가입 성공!'}), 200
+
 @app.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
     username = data.get('username')
     password = data.get('password')
 
-    with sqlite3.connect('database.db') as conn:
-        cursor = conn.cursor()
-        cursor.execute('SELECT * FROM users WHERE username = ? AND password = ?', (username, password))
-        user = cursor.fetchone()
+    user_ref = db.collection('users').document(username)
+    doc = user_ref.get()
 
-    if user:
-        return jsonify({'message': '로그인 성공!', 'username': username})
+    if doc.exists and doc.to_dict().get('password') == password:
+        return jsonify({'message': '로그인 성공!', 'username': username}), 200
     else:
         return jsonify({'error': '아이디 또는 비밀번호가 잘못되었습니다.'}), 401
 
@@ -129,6 +103,5 @@ def get_photo(filename):
     return send_from_directory(UPLOAD_FOLDER, filename)
 
 if __name__ == '__main__':
-    init_db()
     port = int(os.environ.get("PORT", 5000))  # Render가 지정한 포트 사용
     app.run(host='0.0.0.0', port=port)
