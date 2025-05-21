@@ -1,6 +1,6 @@
 import os
 import json
-import firebase_admin
+import base64
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from firebase_admin import credentials, messaging, firestore, initialize_app
@@ -10,13 +10,16 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-app = Flask(__name__) # python app.py
+app = Flask(__name__)
 CORS(app)
 
-# 파베 서비스키
-cred_info = json.loads(os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
+# 환경변수에서 base64로 인코딩된 자격 정보 불러오기
+encoded = os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON_BASE64"]
+decoded_json = base64.b64decode(encoded).decode("utf-8")
+cred_info = json.loads(decoded_json)
+
 cred = credentials.Certificate(cred_info)
-firebase_admin.initialize_app(cred)
+initialize_app(cred)
 db = firestore.client()
 
 # FCM에 알림 보내기기
