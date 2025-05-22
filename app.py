@@ -1,49 +1,48 @@
 import os
 import json
 import base64
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify
 from flask_cors import CORS
-from firebase_admin import credentials, messaging, firestore, initialize_app
+from firebase_admin import credentials, messaging, firestore, storage, initialize_app
 from datetime import datetime
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
+from uuid import uuid4
 
 load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
 
-# 환경변수에서 base64로 인코딩된 자격 정보 불러오기
+# Firebase Admin SDK 초기화
 encoded = os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON_BASE64"]
 decoded_json = base64.b64decode(encoded).decode("utf-8")
 cred_info = json.loads(decoded_json)
-
 cred = credentials.Certificate(cred_info)
-initialize_app(cred)
+
+initialize_app(cred, {
+    'storageBucket': 'smart-mailbox-2f172.appspot.com'
+})
+
+# Firestore & Storage
 db = firestore.client()
 
-# FCM에 알림 보내기기
-def send_fcm_message(token, title, body):
+# FCM 알림 함수
+def send_fcm_message(token, title, body, data):
     message = messaging.Message(
-        notification=messaging.Notification(
-            title=title,
-            body=body,
-        ),
+        notification=messaging.Notification(title=title, body=body),
+        data=data,
         token=token,
     )
-
     response = messaging.send(message)
-    print('Successfully sent message:', response)
+    print('FCM 전송 성공!:', response)
 
-UPLOAD_FOLDER = 'static/photos'
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
-# 라우트: 홈페이지
+# 홈페이지
 @app.route('/')
 def home():
     return "서버 작동 중"
 
-# 회원가입 API
+# 회원가입
 @app.route('/signup', methods=['POST'])
 def signup():
     data = request.get_json()
@@ -65,6 +64,7 @@ def signup():
 
     return jsonify({'message': '회원가입 성공!'}), 200
 
+# 로그인
 @app.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
@@ -79,36 +79,59 @@ def login():
     else:
         return jsonify({'error': '아이디 또는 비밀번호가 잘못되었습니다.'}), 401
 
-# 업로드 API
+# 업로드
 @app.route('/upload', methods=['POST'])
 def upload():
     photo = request.files.get('photo')
+    username = request.form.get('username')
     status = request.form.get('status', 'unknown')
-    timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
 
-    if not photo:
-        return jsonify({'error': '사진 파일이 없습니다.'}), 400
+    if not photo or not username:
+        return jsonify({'error': '사진 또는 사용자 정보가 누락되었습니다.'}), 400
 
-    # 안전한 파일명 생성 및 저장
-    filename = secure_filename(f"{timestamp}.jpg")
-    path = os.path.join(UPLOAD_FOLDER, filename)
-    photo.save(path)
+    # 업로드 시점에 timestamp 및 고유한 파일명 생성
+    timestamp = datetime.now()
+    filename = secure_filename(timestamp.strftime("%Y-%m-%d_%H-%M-%S") + f"_{uuid4().hex[:8]}.jpg")
 
-    # 이벤트 DB에 기록
-    with sqlite3.connect('database.db') as conn:
-        conn.execute('INSERT INTO events (timestamp, status, photo) VALUES (?, ?, ?)',
-                     (timestamp, status, filename))
+    # Firebase Storage 업로드
+    blob = storage.bucket().blob(f'photos/{filename}')
+    blob.upload_from_file(photo, content_type=photo.content_type)
+    blob.make_public()
+    photo_url = blob.public_url
 
-    return jsonify({
-        'message': '업로드 완료!',
-        'photo_url': f'/photo/{filename}'
+    # Firestore에 메타데이터 저장
+    db.collection("photo").add({
+        'filename': filename,
+        'timestamp': timestamp,
+        'status': status,
+        'username': username,
+        'url': photo_url
     })
 
-# 사진 제공 라우트
-@app.route('/photo/<filename>')
-def get_photo(filename):
-    return send_from_directory(UPLOAD_FOLDER, filename)
+    # 사용자 토큰으로 FCM 전송
+    user_doc = db.collection('users').document(username).get()
+    user_data = user_doc.to_dict()
 
+    if user_data and 'token' in user_data:
+        send_fcm_message(
+            token=user_data['token'],
+            title="새로운 우편 도착",
+            body="우편함에 새로운 우편이 도착했어요. 사진을 확인하세요!",
+            data={
+                "photo_url": photo_url,
+                "timestamp": timestamp.isoformat(),
+                "status": status,
+                "username": username
+            }
+        )
+    else:
+        print(f"사용자 {username}의 토큰이 Firestore에 존재하지 않음")
+
+    return jsonify({
+        'message': '사진 업로드 및 알림 전송 완료',
+        'photo_url': photo_url
+    }), 200
+# 서버 지정
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))  # Render가 지정한 포트 사용
+    port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
