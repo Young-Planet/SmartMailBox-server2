@@ -15,13 +15,15 @@ app = Flask(__name__)
 CORS(app)
 
 # Firebase Admin SDK 초기화
-encoded = os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON_BASE64"]
+encoded = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON_BASE64")
+if not encoded:
+    raise ValueError("환경변수 'GOOGLE_APPLICATION_CREDENTIALS_JSON_BASE64'가 설정되지 않았습니다.")
 decoded_json = base64.b64decode(encoded).decode("utf-8")
 cred_info = json.loads(decoded_json)
 cred = credentials.Certificate(cred_info)
 
 initialize_app(cred, {
-    'storageBucket': 'smartmailbox-photo-bucket.appspot.com'
+    'storageBucket': 'smart-mailbox-2f172.appspot.com'
 })
 
 # Firestore & Storage
