@@ -1,2 +1,3 @@
 # Firebase secret key 무시
 firebase/*.json
+venv/
