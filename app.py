@@ -82,55 +82,71 @@ def login():
 # 업로드
 @app.route('/upload', methods=['POST'])
 def upload():
-    photo = request.files.get('photo')
-    username = request.form.get('username')
-    status = request.form.get('status', 'unknown')
+    try:
+        # 데이터 수신
+        photo = request.files.get('photo')
+        username = request.form.get('username')
+        status = request.form.get('status', 'unknown')
 
-    if not photo or not username:
-        return jsonify({'error': '사진 또는 사용자 정보가 누락되었습니다.'}), 400
+        if not photo or not username:
+            return jsonify({'error': '사진 또는 사용자 정보가 누락되었습니다.'}), 400
 
-    # 업로드 시점에 timestamp 및 고유한 파일명 생성
-    timestamp = datetime.now()
-    filename = secure_filename(timestamp.strftime("%Y-%m-%d_%H-%M-%S") + f"_{uuid4().hex[:8]}.jpg")
+        # 파일 이름 생성
+        timestamp = datetime.now()
+        filename = secure_filename(timestamp.strftime("%Y-%m-%d_%H-%M-%S") + f"_{uuid4().hex[:8]}.jpg")
 
-    # Firebase Storage 업로드
-    blob = storage.bucket().blob(f'photos/{filename}')
-    blob.upload_from_file(photo, content_type=photo.content_type)
-    blob.make_public()
-    photo_url = blob.public_url
+        # content_type이 없으면 기본 설정
+        content_type = photo.content_type or 'image/jpeg'
 
-    # Firestore에 메타데이터 저장
-    db.collection("photo").add({
-        'filename': filename,
-        'timestamp': timestamp,
-        'status': status,
-        'username': username,
-        'url': photo_url
-    })
+        # Firebase Storage 업로드
+        blob = storage.bucket().blob(f'photos/{filename}')
+        blob.upload_from_file(photo, content_type=content_type)
+        blob.make_public()
+        photo_url = blob.public_url
 
-    # 사용자 토큰으로 FCM 전송
-    user_doc = db.collection('users').document(username).get()
-    user_data = user_doc.to_dict()
+        # Firestore 저장
+        db.collection("photo").add({
+            'filename': filename,
+            'timestamp': timestamp,
+            'status': status,
+            'username': username,
+            'url': photo_url
+        })
 
-    if user_data and 'token' in user_data:
-        send_fcm_message(
-            token=user_data['token'],
-            title="새로운 우편 도착",
-            body="우편함에 새로운 우편이 도착했어요. 사진을 확인하세요!",
-            data={
-                "photo_url": photo_url,
-                "timestamp": timestamp.isoformat(),
-                "status": status,
-                "username": username
-            }
-        )
-    else:
-        print(f"사용자 {username}의 토큰이 Firestore에 존재하지 않음")
+        # 사용자 토큰 확인 후 FCM 발송
+        user_doc = db.collection('users').document(username).get()
+        if user_doc.exists:
+            user_data = user_doc.to_dict()
+            token = user_data.get('token')
+            if token:
+                try:
+                    send_fcm_message(
+                        token=token,
+                        title="새로운 우편 도착",
+                        body="우편함에 새로운 우편이 도착했어요. 사진을 확인하세요!",
+                        data={
+                            "photo_url": photo_url,
+                            "timestamp": timestamp.isoformat(),
+                            "status": status,
+                            "username": username
+                        }
+                    )
+                except Exception as fcm_error:
+                    print(f"[경고] FCM 메시지 전송 실패: {fcm_error}")
+            else:
+                print(f"[경고] 사용자 {username}에게 등록된 FCM 토큰 없음")
+        else:
+            print(f"[경고] 사용자 {username} 정보가 Firestore에 없음")
 
-    return jsonify({
-        'message': '사진 업로드 및 알림 전송 완료',
-        'photo_url': photo_url
-    }), 200
+        return jsonify({
+            'message': '사진 업로드 및 알림 전송 완료',
+            'photo_url': photo_url
+        }), 200
+
+    except Exception as e:
+        print("서버 오류 발생:", e)
+        return jsonify({'error': f'서버 오류 발생: {str(e)}'}), 500
+
 # 서버 지정
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
