@@ -21,7 +21,7 @@ cred_info = json.loads(decoded_json)
 cred = credentials.Certificate(cred_info)
 
 initialize_app(cred, {
-    'storageBucket': 'smart-mailbox-2f172.appspot.com'
+    'storageBucket': 'smartmailbox-photo-bucket.appspot.com'
 })
 
 # Firestore & Storage
@@ -162,7 +162,7 @@ def get_photos():
         photo_list = [doc.to_dict() for doc in results]
         return jsonify(photo_list), 200
     except Exception as e:
-        print("🔥 사진 조회 실패:", e)
+        print("사진 조회 실패:", e)
         return jsonify({'error': str(e)}), 500
 
 # 서버 지정
