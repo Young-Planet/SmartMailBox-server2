@@ -22,9 +22,12 @@ decoded_json = base64.b64decode(encoded).decode("utf-8")
 cred_info = json.loads(decoded_json)
 cred = credentials.Certificate(cred_info)
 
-initialize_app(cred, {
-    'storageBucket': 'smart-mailbox-2f172.appspot.com'
-})
+# 버킷 미지정 초기화
+initialize_app(cred)
+
+# 수동으로 Firebase Storage 버킷 지정
+BUCKET_NAME = "smart-mailbox-2f172.appspot.com"
+bucket = storage.bucket(BUCKET_NAME)
 
 # Firestore & Storage
 db = firestore.client()
@@ -85,7 +88,6 @@ def login():
 @app.route('/upload', methods=['POST'])
 def upload():
     try:
-        # 데이터 수신
         photo = request.files.get('photo')
         username = request.form.get('username')
         status = request.form.get('status', 'unknown')
@@ -93,20 +95,15 @@ def upload():
         if not photo or not username:
             return jsonify({'error': '사진 또는 사용자 정보가 누락되었습니다.'}), 400
 
-        # 파일 이름 생성
         timestamp = datetime.now()
         filename = secure_filename(timestamp.strftime("%Y-%m-%d_%H-%M-%S") + f"_{uuid4().hex[:8]}.jpg")
-
-        # content_type이 없으면 기본 설정
         content_type = photo.content_type or 'image/jpeg'
 
-        # Firebase Storage 업로드
-        blob = storage.bucket().blob(f'photos/{filename}')
+        blob = bucket.blob(f'photos/{filename}')
         blob.upload_from_file(photo, content_type=content_type)
         blob.make_public()
         photo_url = blob.public_url
 
-        # Firestore 저장
         db.collection("photo").add({
             'filename': filename,
             'timestamp': timestamp,
@@ -115,7 +112,6 @@ def upload():
             'url': photo_url
         })
 
-        # 사용자 토큰 확인 후 FCM 발송
         user_doc = db.collection('users').document(username).get()
         if user_doc.exists:
             user_data = user_doc.to_dict()
@@ -148,7 +144,7 @@ def upload():
     except Exception as e:
         print("서버 오류 발생:", e)
         return jsonify({'error': f'서버 오류 발생: {str(e)}'}), 500
-    
+
 @app.route('/photos', methods=['GET'])
 def get_photos():
     username = request.args.get('username')
@@ -167,7 +163,7 @@ def get_photos():
         print("사진 조회 실패:", e)
         return jsonify({'error': str(e)}), 500
 
-# 서버 지정
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
+    
