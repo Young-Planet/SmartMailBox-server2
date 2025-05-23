@@ -146,6 +146,24 @@ def upload():
     except Exception as e:
         print("서버 오류 발생:", e)
         return jsonify({'error': f'서버 오류 발생: {str(e)}'}), 500
+    
+@app.route('/photos', methods=['GET'])
+def get_photos():
+    username = request.args.get('username')
+    if not username:
+        return jsonify({'error': 'username 파라미터가 필요합니다.'}), 400
+
+    try:
+        query = db.collection('photo')\
+            .where('username', '==', username)\
+            .order_by('timestamp', direction=firestore.Query.DESCENDING)
+        results = query.stream()
+
+        photo_list = [doc.to_dict() for doc in results]
+        return jsonify(photo_list), 200
+    except Exception as e:
+        print("🔥 사진 조회 실패:", e)
+        return jsonify({'error': str(e)}), 500
 
 # 서버 지정
 if __name__ == '__main__':
