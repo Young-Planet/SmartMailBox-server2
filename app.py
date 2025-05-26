@@ -3,7 +3,9 @@ import json
 import base64
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from firebase_admin import credentials, messaging, firestore, storage, initialize_app
+from firebase_admin import credentials, messaging, firestore, initialize_app
+from google.cloud import storage
+from google.oauth2 import service_account
 from datetime import datetime
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
@@ -22,12 +24,11 @@ decoded_json = base64.b64decode(encoded).decode("utf-8")
 cred_info = json.loads(decoded_json)
 cred = credentials.Certificate(cred_info)
 
-# 버킷 미지정 초기화
-initialize_app(cred)
+initialize_app(cred)  # Firebase Admin SDK 초기화
 
-# 수동으로 Firebase Storage 버킷 지정
-BUCKET_NAME = "smart-mailbox-2f172.appspot.com"
-bucket = storage.bucket(BUCKET_NAME)
+credentials_gcp = service_account.Credentials.from_service_account_info(cred_info)
+storage_client = storage.Client(credentials=credentials_gcp, project="smart-mailbox-2f172")
+bucket = storage_client.get_bucket("smart-mailbox-user-content")  # <-- 새 GCP 버킷 이름
 
 # Firestore & Storage
 db = firestore.client()
