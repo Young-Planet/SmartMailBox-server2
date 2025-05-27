@@ -164,6 +164,24 @@ def get_photos():
         print("사진 조회 실패:", e)
         return jsonify({'error': str(e)}), 500
 
+# FCM 토큰 등록용 API
+@app.route('/register_token', methods=['POST'])
+def register_token():
+    data = request.get_json()
+    uid = data.get('uid')
+    token = data.get('token')
+
+    if not uid or not token:
+        return jsonify({'error': 'uid와 token이 필요합니다.'}), 400
+
+    user_ref = db.collection('users').document(uid)
+    if not user_ref.get().exists:
+        return jsonify({'error': '해당 uid의 사용자가 존재하지 않습니다.'}), 404
+
+    user_ref.update({'token': token})
+
+    return jsonify({'message': '토큰 등록 성공'}), 200
+
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
