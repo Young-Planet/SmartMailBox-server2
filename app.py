@@ -112,7 +112,14 @@ def upload():
 
         blob = bucket.blob(f'photos/{uid}/{filename}')
         blob.upload_from_file(photo, content_type=content_type)
-        photo_url = blob.generate_signed_url(expiration=3600)  # 1시간 유효 링크
+
+        # 퍼블릭 권한 부여
+        blob.make_public()
+
+        # 만료 없는 퍼블릭 URL 사용
+        photo_url = blob.public_url
+
+        print(f"[디버깅] 최종 photo_url 값: {photo_url}")
 
         db.collection("photo").add({
             'uid': uid,
@@ -160,9 +167,13 @@ def get_photos():
 
         photo_list = [doc.to_dict() for doc in results]
         return jsonify(photo_list), 200
+    
     except Exception as e:
-        print("사진 조회 실패:", e)
-        return jsonify({'error': str(e)}), 500
+
+        import traceback
+        print("[인덱스 오류 가능성 있음] 사진 조회 실패:")
+        traceback.print_exc()  # <- 예외 전체 메시지 출력
+    return jsonify({'error': str(e)}), 500
 
 # FCM 토큰 등록용 API
 @app.route('/register_token', methods=['POST'])
@@ -185,3 +196,5 @@ def register_token():
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
+
+#서버 최신 업데이트 덮어쓰기기
